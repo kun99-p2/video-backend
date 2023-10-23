@@ -2,6 +2,10 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
 import boto3
+from moviepy.editor import VideoFileClip
+import tempfile
+import os
+import io
 
 app = Flask(__name__)
 CORS(app)
@@ -23,13 +27,25 @@ def upload():
             'description': request.form['desc']
         }
         if uploaded_file:
-            video_filename = secure_filename(request.form['title'])
-            #s3.put_object(ACL='public-read', Body=uploaded_file, Key=video_filename, Metadata=metadata)
-            s3.upload_fileobj(uploaded_file, bucket, uname+"/"+video_filename, ExtraArgs={'ACL': 'public-read', 'Metadata': metadata})
-            return jsonify({'success': True, 'message': 'Video uploaded successfully'}), 200
+            #temp file to use moviepy to check video duration
+            temp = tempfile.NamedTemporaryFile(delete=False)
+            uploaded_file.save(temp)
+            with VideoFileClip(temp.name, audio=False) as video:
+                duration = video.duration
+            if duration <= 60:
+                video_filename = secure_filename(request.form['title'])
+                #s3.put_object(ACL='public-read', Body=uploaded_file, Key=video_filename, Metadata=metadata)
+                with open(temp.name, 'rb') as f:
+                    file_contents = f.read()
+                s3.upload_fileobj(io.BytesIO(file_contents), bucket, uname+"/"+video_filename, ExtraArgs={'ACL': 'public-read', 'Metadata': metadata})
+                temp.close()
+                os.unlink(temp.name)
+                return jsonify({'success': True, 'message': 'Video uploaded successfully'}), 200
+            else:
+                return jsonify({'success':False,'message': 'Video too long'}), 500
     except Exception as e:
         print(e)
-        return jsonify({'success':False,'error': 'Error uploading video'}), 500
+        return jsonify({'success':False,'message': 'Error uploading video'}), 500
     
 @app.route('/videos', methods=['GET'])
 def videos():
@@ -43,7 +59,7 @@ def videos():
         return jsonify({'success':True,'videos': videos})
     except Exception as e:
         print(e)
-        return jsonify({'success':False,'error': 'Error fetching videos'}), 500
+        return jsonify({'success':False,'message': 'Error fetching videos'}), 500
     
 @app.route('/my_videos', methods=['POST'])
 def user_videos():
@@ -59,7 +75,7 @@ def user_videos():
         return jsonify({'success':True,'videos': videos})
     except Exception as e:
         print(e)
-        return jsonify({'success':False,'error': 'Error fetching videos'}), 500
+        return jsonify({'success':False,'message': 'Error fetching videos'}), 500    
 
 if __name__ == '__main__':
     app.run(debug=True, port=5001)
