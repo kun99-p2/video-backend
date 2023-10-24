@@ -24,11 +24,12 @@ def upload():
         uploaded_file = request.files['video']
         uname = request.form['user']
         upload_datetime = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        gen_id = hashlib.sha256((uname+request.form['title']).encode()).hexdigest()
         metadata = {
             'title': request.form['title'],
             'description': request.form['desc'],
             'time': upload_datetime,
-            'id': hashlib.sha256((uname+request.form['title']).encode()).hexdigest()
+            'id': gen_id
         }
         if uploaded_file:
             #temp files to use moviepy to check video duration and create thumbnail
@@ -45,7 +46,7 @@ def upload():
                 s3.upload_file(temp.name, bucket, "videos/"+uname+"/"+video_filename, ExtraArgs={'ACL': 'public-read', 'ContentType':'video/mp4', 'Metadata': metadata})
                 s3.upload_file(temp_thumb.name, bucket, "thumbnail/"+uname+"/"+video_filename, ExtraArgs={'ACL': 'public-read', 'ContentType':'image/jpg', 'Metadata': metadata})
                 print(metadata)
-                return jsonify({'success': True, 'message': 'Video uploaded successfully'}), 200
+                return jsonify({'success': True, 'message': 'Video uploaded successfully', 'id': gen_id}), 200
             else:
                 temp.close()
                 temp_thumb.close()
