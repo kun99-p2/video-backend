@@ -4,9 +4,9 @@ from werkzeug.utils import secure_filename
 import boto3
 from moviepy.editor import VideoFileClip
 import tempfile
-import io
 import imageio
 from datetime import datetime
+import hashlib
 
 app = Flask(__name__)
 CORS(app)
@@ -27,7 +27,8 @@ def upload():
         metadata = {
             'title': request.form['title'],
             'description': request.form['desc'],
-            'time': upload_datetime
+            'time': upload_datetime,
+            'id': hashlib.sha256((uname+request.form['title']).encode()).hexdigest()
         }
         if uploaded_file:
             #temp files to use moviepy to check video duration and create thumbnail
@@ -41,12 +42,9 @@ def upload():
             if duration <= 60:
                 video_filename = secure_filename(request.form['title'])
                 #s3.put_object(ACL='public-read', Body=uploaded_file, Key=video_filename, Metadata=metadata)
-                with open(temp.name, 'rb') as f:
-                    file_contents = f.read()
-                s3.upload_fileobj(io.BytesIO(file_contents), bucket, uname+"/"+video_filename, ExtraArgs={'ACL': 'public-read', 'Metadata': metadata})
-                s3.upload_file(temp_thumb.name, bucket, "thumbnail/"+uname+"/"+video_filename, ExtraArgs={'ACL': 'public-read', 'Metadata': {'title': request.form['title'], 'time': upload_datetime}})
-                temp.close()
-                temp_thumb.close()
+                s3.upload_file(temp.name, bucket, uname+"/"+video_filename, ExtraArgs={'ACL': 'public-read', 'ContentType':'video/mp4', 'Metadata': metadata})
+                s3.upload_file(temp_thumb.name, bucket, "thumbnail/"+uname+"/"+video_filename, ExtraArgs={'ACL': 'public-read', 'ContentType':'image/jpg', 'Metadata': metadata})
+                print(metadata)
                 return jsonify({'success': True, 'message': 'Video uploaded successfully'}), 200
             else:
                 temp.close()
@@ -62,19 +60,19 @@ def delete():
         data = request.get_json()
         username = data['username']
         title = data['title']
-        time = data['time']
+        id = data['id']
         #deleting video
         response = s3.list_objects_v2(Bucket=bucket, Prefix=username+'/')
         for obj in response.get('Contents', []):
             obj_key = s3.head_object(Bucket=bucket, Key=obj['Key'])['Metadata']
-            if obj_key['title'] == title and obj_key['time'] == time:
+            if obj_key['title'] == title and obj_key['id'] == id:
                 s3.delete_object(Bucket=bucket, Key=obj['Key'])
                 break
         #deleting thumbnail
         response_thumbnails = s3.list_objects_v2(Bucket=bucket, Prefix="thumbnail/"+username+'/')
         for obj in response_thumbnails.get('Contents', []):
             obj_key = s3.head_object(Bucket=bucket, Key=obj['Key'])['Metadata']
-            if obj_key['title'] == title and obj_key['time'] == time:
+            if obj_key['title'] == title and obj_key['id'] == id:
                 s3.delete_object(Bucket=bucket, Key=obj['Key'])
                 break
         return jsonify({'success':True,'message': "Succesfully deleted " + title})
@@ -82,29 +80,55 @@ def delete():
         print(e)
         return jsonify({'success':False,'message': 'Error deleting'}), 500
     
-@app.route('/videos', methods=['GET'])
-def videos():
+# @app.route('/videos', methods=['GET'])
+# def videos():
+#     try:
+#         response = s3.list_objects(Bucket="ss-p2")
+#         videos = []
+#         for obj in response.get('Contents', []):
+#             print('Object Key:', obj['Key'])
+#             video = s3.generate_presigned_url('get_object', Params={'Bucket': bucket, 'Key': obj['Key']})
+#             videos.append(video)
+#         return jsonify({'success':True,'videos': videos})
+#     except Exception as e:
+#         print(e)
+#         return jsonify({'success':False,'message': 'Error fetching videos'}), 500
+
+@app.route('/video', methods=['POST'])
+def video():
     try:
+        data = request.get_json()
+        id = data['id']
         response = s3.list_objects(Bucket="ss-p2")
-        videos = []
+        requested_video = ""
         for obj in response.get('Contents', []):
-            print('Object Key:', obj['Key'])
-            video = s3.generate_presigned_url('get_object', Params={'Bucket': bucket, 'Key': obj['Key']})
-            videos.append(video)
-        return jsonify({'success':True,'videos': videos})
+            obj_key = s3.head_object(Bucket=bucket, Key=obj['Key'])['Metadata']
+            if obj_key['id'] == id:
+                video = s3.generate_presigned_url('get_object', Params={'Bucket': bucket, 'Key': obj['Key']})
+                requested_video=video
+                break
+        return jsonify({'success':True,'video': requested_video, 'title': obj_key['title']})
     except Exception as e:
         print(e)
         return jsonify({'success':False,'message': 'Error fetching videos'}), 500
-    
+
 @app.route('/thumbnails', methods=['GET'])
 def thumbnails():
     try:
         response = s3.list_objects(Bucket="ss-p2", Prefix="thumbnail/")
         thumbnails = []
         for obj in response.get('Contents', []):
-            print('Object Key:', obj['Key'])
             thumbnail = s3.generate_presigned_url('get_object', Params={'Bucket': bucket, 'Key': obj['Key']})
-            thumbnails.append(thumbnail)
+            response = s3.head_object(Bucket=bucket, Key= obj['Key'])
+            metadata = response['Metadata']
+            thumbnails.append([{
+                'file': thumbnail,
+                'metadata': {
+                    'title': metadata['title'],
+                    'time': metadata['time'],
+                    'id': metadata['id']
+                }
+            }])
         return jsonify({'success':True,'thumbnails': thumbnails})
     except Exception as e:
         print(e)
@@ -116,15 +140,14 @@ def user_videos():
     try:
         response = s3.list_objects(Bucket="ss-p2", Prefix=data['username']+'/')
         videos = []
-        print("GET ", data['username'])
         for obj in response.get('Contents', []):
-            print('Object Key:', obj['Key'])
             video = s3.generate_presigned_url('get_object', Params={'Bucket': bucket, 'Key': obj['Key']})
             videos.append(data = [{
                 'file': video,
                 'metadata': {
                     'title': video['Metadata']['title'],
-                    'time': video['Metadata']['time']
+                    'time': video['Metadata']['time'],
+                    'id': video['Metadata']['id']
                 }
             }])
         return jsonify({'success':True,'videos': videos})
@@ -136,25 +159,20 @@ def user_videos():
 def user_thumbnails():
     data = request.get_json()
     try:
-        print("thumbnail/"+data['username']+'/')
         response = s3.list_objects(Bucket="ss-p2", Prefix="thumbnail/"+data['username']+'/')
         thumbnails = []
-        print("GET ", data['username'])
         for obj in response.get('Contents', []):
-            print('Object Key:', obj['Key'])
             thumbnail = s3.generate_presigned_url('get_object', Params={'Bucket': bucket, 'Key': obj['Key']})
             response = s3.head_object(Bucket=bucket, Key= obj['Key'])
             metadata = response['Metadata']
-            tndata = [{
+            thumbnails.append([{
                 'file': thumbnail,
                 'metadata': {
                     'title': metadata['title'],
-                    'time': metadata['time']
+                    'time': metadata['time'],
+                    'id': metadata['id']
                 }
-            }]
-            print(tndata)
-            thumbnails.append(tndata)
-            print(thumbnails)
+            }])
         return jsonify({'success':True,'thumbnails': thumbnails})
     except Exception as e:
         print(e)
