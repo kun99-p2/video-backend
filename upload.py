@@ -1,59 +1,85 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-from werkzeug.utils import secure_filename
+import os
 import boto3
-from moviepy.editor import VideoFileClip
-import tempfile
-import imageio
+import botocore
 from datetime import datetime
 import hashlib
+
 
 app = Flask(__name__)
 CORS(app)
 
-access_key = 'DO00ZDHLNMDBMNG3QCUH'
-secret = 'OwFblS+RCSVMALzyiOopm+Bo5p2U672vzKF64+b996g'
+access_key = 'DO00JQGULATEWKWZYCHA'
+secret = '5rpGncSUAkl0BCo0E63FBy5FR3EO/daTuwxZPvOcp+8'
 endpoint = 'https://sgp1.digitaloceanspaces.com'
 bucket = 'ss-p2'
+session = boto3.session.Session()
+s3 = session.client('s3',
+                        config=botocore.config.Config(s3={'addressing_style': 'virtual'}),
+                        region_name='sgp1',
+                        endpoint_url='https://sgp1.digitaloceanspaces.com',
+                        aws_access_key_id=access_key,
+                        aws_secret_access_key=secret)
 
-s3 = boto3.client('s3', endpoint_url=endpoint, aws_access_key_id=access_key, aws_secret_access_key=secret)
-
-@app.route('/upload', methods=['POST'])
-def upload():
+@app.route('/get_presigned_url', methods=['POST'])  
+def get_presigned_url():
     try:
-        uploaded_file = request.files['video']
         uname = request.form['user']
-        upload_datetime = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         gen_id = hashlib.sha256((uname+request.form['title']).encode()).hexdigest()
-        metadata = {
-            'title': request.form['title'],
-            'description': request.form['desc'],
-            'time': upload_datetime,
-            'id': gen_id
-        }
-        if uploaded_file:
-            #temp files to use moviepy to check video duration and create thumbnail
-            temp = tempfile.NamedTemporaryFile(delete=False)
-            temp_thumb = tempfile.NamedTemporaryFile(delete=False, suffix=".jpg")            
-            uploaded_file.save(temp)
-            with VideoFileClip(temp.name) as video:
-                thumbnail = video.get_frame(1)
-                imageio.imwrite(temp_thumb.name, thumbnail)
-                duration = video.duration
-            if duration <= 60:
-                video_filename = secure_filename(request.form['title'])
-                #s3.put_object(ACL='public-read', Body=uploaded_file, Key=video_filename, Metadata=metadata)
-                s3.upload_file(temp.name, bucket, "videos/"+uname+"/"+video_filename, ExtraArgs={'ACL': 'public-read', 'ContentType':'video/mp4', 'Metadata': metadata})
-                s3.upload_file(temp_thumb.name, bucket, "thumbnail/"+uname+"/"+video_filename, ExtraArgs={'ACL': 'public-read', 'ContentType':'image/jpg', 'Metadata': metadata})
-                print(metadata)
-                return jsonify({'success': True, 'message': 'Video uploaded successfully', 'id': gen_id}), 200
-            else:
-                temp.close()
-                temp_thumb.close()
-                return jsonify({'success':False,'message': 'Video too long'}), 500
+        upload_datetime = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        key = "videos/"+uname+"/"+request.form['title']
+        presigned_url = s3.generate_presigned_url(ClientMethod='put_object', Params={'Bucket': bucket,'Key': key}, ExpiresIn=900)
+        return jsonify({'url': presigned_url, 'id': gen_id, 'datetime': upload_datetime})
     except Exception as e:
-        print(e)
-        return jsonify({'success':False,'message': 'Error uploading video'}), 500
+        return jsonify({'error': e}), 500
+
+# @app.route('/enqueue_video_task', methods=['POST'])
+# def enqueue_video_task():
+#     data = request.get_json()
+#     video_key = data.get('key')
+#     with Connection(redis_conn):
+#         queue = Queue(queue_name)
+#         queue.enqueue('worker.process_video', video_key)
+#     return jsonify({'message': 'Video processing task enqueued successfully'})
+
+    
+# @app.route('/upload', methods=['POST'])
+# def upload():
+#     try:
+#         uploaded_file = request.files['video']
+#         uname = request.form['user']
+#         upload_datetime = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+#         gen_id = hashlib.sha256((uname+request.form['title']).encode()).hexdigest()
+#         metadata = {
+#             'title': request.form['title'],
+#             'description': request.form['desc'],
+#             'time': upload_datetime,
+#             'id': gen_id
+#         }
+#         if uploaded_file:
+#             #temp files to use moviepy to check video duration and create thumbnail
+#             temp = tempfile.NamedTemporaryFile(delete=False)
+#             temp_thumb = tempfile.NamedTemporaryFile(delete=False, suffix=".jpg")            
+#             uploaded_file.save(temp)
+#             with VideoFileClip(temp.name) as video:
+#                 thumbnail = video.get_frame(1)
+#                 imageio.imwrite(temp_thumb.name, thumbnail)
+#                 duration = video.duration
+#             if duration <= 60:
+#                 video_filename = secure_filename(request.form['title'])
+#                 #s3.put_object(ACL='public-read', Body=uploaded_file, Key=video_filename, Metadata=metadata)
+#                 s3.upload_file(temp.name, bucket, "videos/"+uname+"/"+video_filename, ExtraArgs={'ACL': 'public-read', 'ContentType':'video/mp4', 'Metadata': metadata})
+#                 s3.upload_file(temp_thumb.name, bucket, "thumbnail/"+uname+"/"+video_filename, ExtraArgs={'ACL': 'public-read', 'ContentType':'image/jpg', 'Metadata': metadata})
+#                 print(metadata)
+#                 return jsonify({'success': True, 'message': 'Video uploaded successfully', 'id': gen_id}), 200
+#             else:
+#                 temp.close()
+#                 temp_thumb.close()
+#                 return jsonify({'success':False,'message': 'Video too long'}), 500
+#     except Exception as e:
+#         print(e)
+#         return jsonify({'success':False,'message': 'Error uploading video'}), 500
     
 @app.route('/delete', methods=['DELETE'])
 def delete():
