@@ -1,11 +1,10 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-import os
 import boto3
 import botocore
 from datetime import datetime
 import hashlib
-
+import message_broker
 
 app = Flask(__name__)
 CORS(app)
@@ -30,56 +29,18 @@ def get_presigned_url():
         upload_datetime = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         key = "videos/"+uname+"/"+request.form['title']
         presigned_url = s3.generate_presigned_url(ClientMethod='put_object', Params={'Bucket': bucket,'Key': key}, ExpiresIn=900)
+        print(presigned_url)
         return jsonify({'url': presigned_url, 'id': gen_id, 'datetime': upload_datetime})
     except Exception as e:
         return jsonify({'error': e}), 500
 
-# @app.route('/enqueue_video_task', methods=['POST'])
-# def enqueue_video_task():
-#     data = request.get_json()
-#     video_key = data.get('key')
-#     with Connection(redis_conn):
-#         queue = Queue(queue_name)
-#         queue.enqueue('worker.process_video', video_key)
-#     return jsonify({'message': 'Video processing task enqueued successfully'})
-
-    
-# @app.route('/upload', methods=['POST'])
-# def upload():
-#     try:
-#         uploaded_file = request.files['video']
-#         uname = request.form['user']
-#         upload_datetime = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-#         gen_id = hashlib.sha256((uname+request.form['title']).encode()).hexdigest()
-#         metadata = {
-#             'title': request.form['title'],
-#             'description': request.form['desc'],
-#             'time': upload_datetime,
-#             'id': gen_id
-#         }
-#         if uploaded_file:
-#             #temp files to use moviepy to check video duration and create thumbnail
-#             temp = tempfile.NamedTemporaryFile(delete=False)
-#             temp_thumb = tempfile.NamedTemporaryFile(delete=False, suffix=".jpg")            
-#             uploaded_file.save(temp)
-#             with VideoFileClip(temp.name) as video:
-#                 thumbnail = video.get_frame(1)
-#                 imageio.imwrite(temp_thumb.name, thumbnail)
-#                 duration = video.duration
-#             if duration <= 60:
-#                 video_filename = secure_filename(request.form['title'])
-#                 #s3.put_object(ACL='public-read', Body=uploaded_file, Key=video_filename, Metadata=metadata)
-#                 s3.upload_file(temp.name, bucket, "videos/"+uname+"/"+video_filename, ExtraArgs={'ACL': 'public-read', 'ContentType':'video/mp4', 'Metadata': metadata})
-#                 s3.upload_file(temp_thumb.name, bucket, "thumbnail/"+uname+"/"+video_filename, ExtraArgs={'ACL': 'public-read', 'ContentType':'image/jpg', 'Metadata': metadata})
-#                 print(metadata)
-#                 return jsonify({'success': True, 'message': 'Video uploaded successfully', 'id': gen_id}), 200
-#             else:
-#                 temp.close()
-#                 temp_thumb.close()
-#                 return jsonify({'success':False,'message': 'Video too long'}), 500
-#     except Exception as e:
-#         print(e)
-#         return jsonify({'success':False,'message': 'Error uploading video'}), 500
+@app.route('/thumbnail', methods=['POST'])
+def enqueue_thumbnail_task():
+    data = request.get_json()
+    key = data.get('key')
+    tb_key = data.get('tb_key')
+    message_broker.enqueue_video_tasks(key, tb_key, data.get("title"), data.get("id"))
+    return 'Enqueued tasks.'
     
 @app.route('/delete', methods=['DELETE'])
 def delete():
@@ -116,6 +77,7 @@ def videos():
             video = s3.generate_presigned_url('get_object', Params={'Bucket': bucket, 'Key': obj['Key']})
             response = s3.head_object(Bucket=bucket, Key= obj['Key'])
             metadata = response['Metadata']
+            print(response)
             videos.append([{
                 'file': video,
                 'metadata': {
