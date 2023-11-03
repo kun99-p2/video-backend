@@ -38,8 +38,8 @@ def get_presigned_url():
 def enqueue_thumbnail_task():
     data = request.get_json()
     key = data.get('key')
-    tb_key = data.get('tb_key')
-    message_broker.enqueue_video_tasks(key, tb_key, data.get("title"), data.get("id"))
+    user = data.get('user')
+    message_broker.enqueue_video_tasks(key, user, data.get("title"), data.get("id"), data.get("time"))
     return 'Enqueued tasks.'
     
 @app.route('/delete', methods=['DELETE'])
@@ -63,6 +63,7 @@ def delete():
             if obj_key['title'] == title and obj_key['id'] == id:
                 s3.delete_object(Bucket=bucket, Key=obj['Key'])
                 break
+        print("SUCCESS")
         return jsonify({'success':True,'message': "Succesfully deleted " + title})
     except Exception as e:
         print(e)
@@ -71,13 +72,17 @@ def delete():
 @app.route('/videos', methods=['GET'])
 def videos():
     try:
-        response = s3.list_objects(Bucket="ss-p2", Prefix="videos/")
-        videos = []
+        response = s3.list_objects(Bucket=bucket, Prefix="videos/")
+        others = []
         for obj in response.get('Contents', []):
-            video = s3.generate_presigned_url('get_object', Params={'Bucket': bucket, 'Key': obj['Key']})
-            response = s3.head_object(Bucket=bucket, Key= obj['Key'])
+            if obj['Key'].endswith(".m3u8"):
+                others.append(obj['Key'])
+        videos = []
+        print(others)
+        for key in others:
+            video = s3.generate_presigned_url('get_object', Params={'Bucket': bucket, 'Key': key})
+            response = s3.head_object(Bucket=bucket, Key= key)
             metadata = response['Metadata']
-            print(response)
             videos.append([{
                 'file': video,
                 'metadata': {
@@ -86,38 +91,99 @@ def videos():
                     'id': metadata['id']
                 }
             }])
-        print(videos)
         return jsonify({'success':True,'videos': videos})
     except Exception as e:
         print(e)
         return jsonify({'success':False,'message': 'Error fetching videos'}), 500
 
-@app.route('/video', methods=['POST'])
-def video():
+#lazy sol
+# @app.route('/spec/<index>', methods=['GET'])
+# def specific_index(index):
+#     try:
+#         response = s3.list_objects(Bucket=bucket, Prefix="videos/")
+#         others = []
+#         for obj in response.get('Contents', []):
+#             if obj['Key'].endswith(".m3u8"):
+#                 others.append(obj['Key'])
+#         videos = []
+#         for key in others:
+#             video = s3.generate_presigned_url('get_object', Params={'Bucket': bucket, 'Key': key})
+#             response = s3.head_object(Bucket=bucket, Key= obj['Key'])
+#             metadata = response['Metadata']
+#             videos.append([{
+#                 'file': video,
+#                 'metadata': {
+#                     'title': metadata['title'],
+#                     'time': metadata['time'],
+#                     'id': metadata['id']
+#                 }
+#             }])
+#         return jsonify({'success':True,'video': videos[int(index)]})
+#     except Exception as e:
+#         print(e)
+#         return jsonify({'success':False,'message': 'Error fetching video'}), 500
+
+@app.route('/hls', methods=['POST'])
+def video_chunks():
     try:
         data = request.get_json()
-        id = data['id']
-        response = s3.list_objects(Bucket="ss-p2", Prefix="videos/")
-        requested_video = []
-        for obj in response.get('Contents', []):
-            obj_key = s3.head_object(Bucket=bucket, Key=obj['Key'])['Metadata']
-            if obj_key['id'] == id:
-                video = s3.generate_presigned_url('get_object', Params={'Bucket': bucket, 'Key': obj['Key']})
-                response = s3.head_object(Bucket=bucket, Key= obj['Key'])
-                metadata = response['Metadata']
-                requested_video = ([{
-                    'file': video,
-                    'metadata': {
-                        'title': metadata['title'],
-                        'time': metadata['time'],
-                        'id': metadata['id']
-                    }
-                }])
-                break
-        return jsonify({'success':True,'video': requested_video})
+        m3u8_key = 'videos/'+data['user']+'/'+data['title']+'.m3u8'
+        m3u8 = s3.generate_presigned_url('get_object', Params={'Bucket': bucket, 'Key': m3u8_key})
+        response = s3.head_object(Bucket=bucket, Key= m3u8_key)
+        metadata = response['Metadata']
+        return jsonify({'m3u8': m3u8, 'metadata': metadata})
     except Exception as e:
         print(e)
-        return jsonify({'success':False,'message': 'Error fetching videos'}), 500
+        return jsonify({'f': 'f'})
+    
+# @app.route('/videos', methods=['GET'])
+# def videos():
+#     try:
+#         response = s3.list_objects(Bucket="ss-p2", Prefix="videos/")
+#         videos = []
+#         for obj in response.get('Contents', []):
+#             video = s3.generate_presigned_url('get_object', Params={'Bucket': bucket, 'Key': obj['Key']})
+#             response = s3.head_object(Bucket=bucket, Key= obj['Key'])
+#             metadata = response['Metadata']
+#             videos.append([{
+#                 'file': video,
+#                 'metadata': {
+#                     'title': metadata['title'],
+#                     'time': metadata['time'],
+#                     'id': metadata['id']
+#                 }
+#             }])
+#         return jsonify({'success':True,'videos': videos})
+#     except Exception as e:
+#         print(e)
+#         return jsonify({'success':False,'message': 'Error fetching videos'}), 500
+
+# @app.route('/video', methods=['POST'])
+# def video():
+#     try:
+#         data = request.get_json()
+#         id = data['id']
+#         response = s3.list_objects(Bucket="ss-p2", Prefix="videos/")
+#         requested_video = []
+#         for obj in response.get('Contents', []):
+#             obj_key = s3.head_object(Bucket=bucket, Key=obj['Key'])['Metadata']
+#             if obj_key['id'] == id:
+#                 video = s3.generate_presigned_url('get_object', Params={'Bucket': bucket, 'Key': obj['Key']})
+#                 response = s3.head_object(Bucket=bucket, Key= obj['Key'])
+#                 metadata = response['Metadata']
+#                 requested_video = ([{
+#                     'file': video,
+#                     'metadata': {
+#                         'title': metadata['title'],
+#                         'time': metadata['time'],
+#                         'id': metadata['id']
+#                     }
+#                 }])
+#                 break
+#         return jsonify({'success':True,'video': requested_video})
+#     except Exception as e:
+#         print(e)
+#         return jsonify({'success':False,'message': 'Error fetching videos'}), 500
 
 @app.route('/thumbnails', methods=['GET'])
 def thumbnails():
@@ -141,26 +207,26 @@ def thumbnails():
         print(e)
         return jsonify({'success':False,'message': 'Error fetching thuumbnails'}), 500
     
-@app.route('/my_videos', methods=['POST'])
-def user_videos():
-    data = request.get_json()
-    try:
-        response = s3.list_objects(Bucket="ss-p2", Prefix="videos/"+data['username']+'/')
-        videos = []
-        for obj in response.get('Contents', []):
-            video = s3.generate_presigned_url('get_object', Params={'Bucket': bucket, 'Key': obj['Key']})
-            videos.append([{
-                'file': video,
-                'metadata': {
-                    'title': video['Metadata']['title'],
-                    'time': video['Metadata']['time'],
-                    'id': video['Metadata']['id']
-                }
-            }])
-        return jsonify({'success':True,'videos': videos})
-    except Exception as e:
-        print(e)
-        return jsonify({'success':False,'message': 'Error fetching videos'}), 500    
+# @app.route('/my_videos', methods=['POST'])
+# def user_videos():
+#     data = request.get_json()
+#     try:
+#         response = s3.list_objects(Bucket="ss-p2", Prefix="videos/"+data['username']+'/')
+#         videos = []
+#         for obj in response.get('Contents', []):
+#             video = s3.generate_presigned_url('get_object', Params={'Bucket': bucket, 'Key': obj['Key']})
+#             videos.append([{
+#                 'file': video,
+#                 'metadata': {
+#                     'title': video['Metadata']['title'],
+#                     'time': video['Metadata']['time'],
+#                     'id': video['Metadata']['id']
+#                 }
+#             }])
+#         return jsonify({'success':True,'videos': videos})
+#     except Exception as e:
+#         print(e)
+#         return jsonify({'success':False,'message': 'Error fetching videos'}), 500    
     
 @app.route('/my_thumbnails', methods=['POST'])
 def user_thumbnails():
