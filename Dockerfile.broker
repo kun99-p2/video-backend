@@ -6,6 +6,8 @@ COPY broker-requirements.txt /app/
 
 RUN pip install -r broker-requirements.txt
 
-COPY message_broker.py chunker/chunker.py thumbnail_extractor/task.py video_processing/converter.py /app/
+COPY message_broker.py chunker/chunker.py thumbnail_extractor/task.py /app/
+
+COPY video_processing/converter.py /app/
 
 CMD ["rq", "worker", "q", "--url", "redis://redis-server:6379/0"]
