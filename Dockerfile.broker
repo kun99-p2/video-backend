@@ -1,0 +1,7 @@
+FROM python:3.10-slim
+
+COPY . /app
+WORKDIR /app
+RUN pip install -r broker-requirements.txt
+
+CMD ["rq", "worker", "q", "--url", "redis://redis-server:6379/0"]

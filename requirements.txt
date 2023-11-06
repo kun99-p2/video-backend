@@ -1,0 +1,9 @@
+flask
+flask_cors
+boto3
+botocore
+datetime
+hashlib
+message_broker
+re
+tempfile
