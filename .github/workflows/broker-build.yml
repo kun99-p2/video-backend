@@ -26,7 +26,7 @@ jobs:
       id: vars
       run: echo "::set-output name=sha_short::$(git rev-parse --short HEAD)"
     - name: List Submodule Files
-      run: ls -R video_processing
+      run: ls -R
     - name: Build the Docker image
       run: |
         docker build . --file Dockerfile.broker \
