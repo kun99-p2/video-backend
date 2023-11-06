@@ -21,8 +21,8 @@ s3 = session.client('s3',
                         aws_access_key_id=access_key,
                         aws_secret_access_key=secret)
 
-def enqueue_video_tasks(key, user, title, id, time):
-    input = {'key': key, 'user': user, 'title': title, 'id': id, 'time': time}
+def enqueue_video_tasks(key, user, title, desc, id, time):
+    input = {'key': key, 'user': user, 'title': title, 'desc': desc, 'id': id, 'time': time}
     firstQueue.enqueue(task.extract_thumbnail, input)
     firstQueue.enqueue(converter.convert, input)
     firstQueue.enqueue(chunker.chunker, input)

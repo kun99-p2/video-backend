@@ -45,7 +45,7 @@ def enqueue_tasks():
     data = request.get_json()
     key = data.get('key')
     user = data.get('user')
-    message_broker.enqueue_video_tasks(key, user, data.get("title"), data.get("id"), data.get("time"))
+    message_broker.enqueue_video_tasks(key, user, data.get("title"), data.get("desc"), data.get("id"), data.get("time"))
     return 'Enqueued tasks.'
 
 #delete video+thumbnail
