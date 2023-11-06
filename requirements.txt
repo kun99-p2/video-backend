@@ -2,4 +2,3 @@ flask
 flask_cors
 boto3
 botocore
-message_broker

@@ -1,7 +1,7 @@
-/thumbnail_extractor
-/video_converter
-/chunker
 boto3
 botocore
 redis
 rq
+ffmpeg
+moviepy
+imageio
