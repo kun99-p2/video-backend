@@ -28,6 +28,8 @@ jobs:
     - name: Initialize and Update Submodules
       run: |
         git submodule update --init --recursive
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     - name: Build the Docker image
       run: |
         docker build . --file Dockerfile.broker \
