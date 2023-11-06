@@ -25,13 +25,6 @@ jobs:
     - name: Derive short SHA name
       id: vars
       run: echo "::set-output name=sha_short::$(git rev-parse --short HEAD)"
-    - name: Initialize and Update Submodules
-      run: |
-        git submodule update --init --recursive
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
     - name: Build the Docker image
       run: |
         docker build . --file Dockerfile.broker \
