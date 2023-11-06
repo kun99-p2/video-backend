@@ -1,6 +1,6 @@
-/thumbnail_extractor/task
-/video_converter/converter
-/chunker/chunker
+/thumbnail_extractor
+/video_converter
+/chunker
 boto3
 botocore
 redis
