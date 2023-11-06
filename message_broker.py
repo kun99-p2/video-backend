@@ -1,5 +1,5 @@
 from thumbnail_extractor import task
-from video_converter import converter
+from video_processing import converter
 from chunker import chunker
 import boto3
 import botocore

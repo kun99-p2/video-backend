@@ -1,0 +1,9 @@
+[submodule "chunker"]
+	path = chunker
+	url = https://github.com/kun99-p2/chunker
+[submodule "thumbnail_extractor"]
+	path = thumbnail_extractor
+	url = https://github.com/kun99-p2/thumbnail_extractor
+[submodule "video_processing"]
+	path = video_processing
+	url = https://github.com/kun99-p2/video_processing
