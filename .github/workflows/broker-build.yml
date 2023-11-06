@@ -25,6 +25,10 @@ jobs:
     - name: Derive short SHA name
       id: vars
       run: echo "::set-output name=sha_short::$(git rev-parse --short HEAD)"
+    - name: Initialize Submodules
+      run: git submodule update --init --recursive
+    - name: List Submodule Files
+      run: ls -R video_processing
     - name: Build the Docker image
       run: |
         docker build . --file Dockerfile.broker \
