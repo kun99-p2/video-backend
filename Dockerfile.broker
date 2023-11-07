@@ -8,4 +8,6 @@ RUN pip install -r broker-requirements.txt
 
 COPY message_broker.py chunker.py task.py converter.py /app/
 
-CMD ["rq", "worker", "q", "--url", "redis://redis-server:6379/0"]
+FROM redis:latest
+
+CMD ["redis-server"]
