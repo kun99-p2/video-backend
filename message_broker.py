@@ -1,6 +1,6 @@
-import task
-import converter
-import chunker
+from task import extract_thumbnail
+from converter import convert
+from chunker import chunker
 import boto3
 import botocore
 from redis import Redis
@@ -23,6 +23,6 @@ s3 = session.client('s3',
 
 def enqueue_video_tasks(key, user, title, desc, id, time):
     input = {'key': key, 'user': user, 'title': title, 'desc': desc, 'id': id, 'time': time}
-    firstQueue.enqueue(task.extract_thumbnail, input)
-    firstQueue.enqueue(converter.convert, input)
-    firstQueue.enqueue(chunker.chunker, input)
+    firstQueue.enqueue(extract_thumbnail, input)
+    firstQueue.enqueue(convert, input)
+    firstQueue.enqueue(chunker, input)
