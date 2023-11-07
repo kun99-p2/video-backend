@@ -8,6 +8,7 @@ RUN pip install -r broker-requirements.txt
 
 COPY message_broker.py chunker.py task.py converter.py /app/
 
-FROM redis:latest
+CMD ["python", "message_broker.py"]
+# FROM redis:latest
 
-CMD ["redis-server"]
+# CMD ["redis-server"]
