@@ -2,3 +2,8 @@ flask
 flask_cors
 boto3
 botocore
+redis
+rq
+ffmpeg
+moviepy
+imageio
