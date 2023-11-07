@@ -1,6 +1,6 @@
-from thumbnail_extractor import task
-from video_processing import converter
-from chunker import chunker
+import task
+import converter
+import chunker
 import boto3
 import botocore
 from redis import Redis
